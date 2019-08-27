@@ -67,3 +67,62 @@ sqoop import \
 --username root --password cloudera \
 --table customers --target-dir /user/cloudera/p1/p4/customers
 
+QUESTION 4 join 2 file locations to find out  customers who have placed more than 4 orders
+spark-shell --master yarn-client
+
+case class cust(customer_id:String,customer_fname:String)
+case class ord(customer_id:String,status:String)
+val cusDF=sc.textFile("/user/cloudera/p1/p4/customers").map(x => x.split(",")).map(c => cust(c(0),c(1))).toDF()
+val ordDF=sc.textFile("/user/cloudera/p1/p4/orders").map(x => x.split(",")).map(o => ord(o(2),o(3))).toDF()
+ordDF.registerTempTable("orders")
+val custOrd = sqlContext.sql("select customer_id, count(*) from orders group by customer_id having count(*)>4")
+val joinDF = cusDF.join(custOrd,"customer_id")
+joinDF.write.json("/user/cloudera/p1/p4/output")
+
+PREP FOR QUESTION 5
+sqoop import \
+--connect "jdbc:mysql://localhost/retail_db" \
+--password cloudera --username root \
+--table products --target-dir /user/cloudera/practice1/problem5 \
+--as-parquetfile \
+--split-by "product_id"
+
+QUESTION 5 move parquet files to another output folder
+
+/user/cloudera/practice1/problem5 to /user/cloudera/practice1/problem5/output
+
+Get maximum product_price in each product_category and order the results by maximum price descending.
+Final output should have product_id and max_price separated by pipe delimiter
+Ouput should be saved in text format with Gzip compression
+
+spark-shell --master yarn-client
+
+-group by category and grab max price and sort decending
+
+var productDF = sqlContext.read.parquet("/user/cloudera/practice1/problem5");
+productDF.registerTempTable("product")
+val maxDF=sqlContext.sql("select product_category_id,max(product_price) from product group by product_category_id order by max(product_price) desc")
+import org.apache.hadoop.io.compress.GzipCodec
+maxDF.rdd.map(x => x.mkString("|")).saveAsTextFile("/user/cloudera/practice1/problem5/output",classOf[GzipCodec]);
+
+QUESTION 6 PREP
+sqoop import \
+--connect "jdbc:mysql://localhost/retail_db" \
+--password cloudera --username root \
+--table customers \
+--fields-terminated-by '\t' \
+--columns "customer_id,customer_fname,customer_city"  \
+--target-dir /user/cloudera/problem6/customer/text
+
+QUESTION 6
+Provided customer tab delimited files at below HDFS location.
+Input folder is  /user/cloudera/practice1/problem6
+Find all customers that lives 'Caguas' city.
+Result should be saved in /user/cloudera/practice1/problem6/output
+Output file should be saved in avro format in deflate compression.
+
+spark-shell --master yarn-client
+case class Customer(customer_id:String,name:String,city:String)
+val custData = sc.textFile("/user/cloudera/practice1/problem6").map(x => x.split("\t")).map(c => Customer(c(0),c(1),c(2))).toDF()
+val filteredData = custData.filter("city='Caguas'")
+filteredData.write.avro("/user/cloudera/practice1/problem6/output")
