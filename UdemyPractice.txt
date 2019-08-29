@@ -8,6 +8,7 @@ sqoop import \
 --username=root --password=cloudera \
 --table customers \
 --target-dir /user/cloudera/problem1/customers/avrodata \
+--compress
 --compression-codec snappy \
 --where "customer_state ='TX' and customer_fname='Mary'" \
 --columns "customer_fname,customer_lname,customer_state" \
@@ -125,4 +126,81 @@ spark-shell --master yarn-client
 case class Customer(customer_id:String,name:String,city:String)
 val custData = sc.textFile("/user/cloudera/practice1/problem6").map(x => x.split("\t")).map(c => Customer(c(0),c(1),c(2))).toDF()
 val filteredData = custData.filter("city='Caguas'")
-filteredData.write.avro("/user/cloudera/practice1/problem6/output")
+import com.databricks.spark.avro._
+filteredData.write.avro("/user/cloudera/practice1/problem6/output2"); ?????????????
+
+PREP QUESTION 7
+sqoop import \
+--connect "jdbc:mysql://localhost/retail_db" \
+--password cloudera --username root \
+--table customers  \
+--target-dir /user/cloudera/practice1/problem7/customer/avro \
+--columns "customer_id,customer_fname,customer_lname" \
+--as-avrodatafile
+
+QUESTION 7
+Convert data-files stored at hdfs location /user/cloudera/practice1/problem7/customer/avro  
+into tab delimited file using gzip compression and save in HDFS.
+Result should be saved in /user/cloudera/practice1/problem7/customer_text_gzip 
+Output file should be saved as tab delimited file in gzip Compression.
+Sample Output:
+21    Andrew   Smith
+111    Mary    Jons
+
+spark-shell --master yarn-client
+import com.databricks.spark.avro._
+val dataAvro = sqlContext.read.format("com.databricks.spark.avro").load("/user/cloudera/practice1/problem7/customer/avro") ###IN A DF
+####MAP IT WITH \t in between each value and save as text files
+dataAvro.map(x => x(0)+"\t"+x(1)+"\t"+x(2)).saveAsTextFile("user/cloudera/practice1/problem7/customer_text_gzip",classOf[org.apache.hadoop.io.compress.GzipCodec])
+
+PREP FOR QUESTION 8
+sqoop import \
+--connect "jdbc:mysql://localhost/retail_db" \
+--username root --password cloudera \
+--table products  \
+--hive-import \
+--create-hive-table \
+--hive-database default \
+--hive-table product_replica -split-by product_id
+
+QUESTION 8
+Get products from metastore table named "product_replica" whose price > 100 
+and save the results in HDFS in parquet format.
+Result should be saved in /user/cloudera/practice1/problem8/product/output as parquet file
+Files should be saved in Gzip compression.
+
+val sqlContext = new org.apache.spark.sql.sqlContext(sc)
+val result = sqlContext.sql("select * from product_replica where product_price>100")
+result.parquet("/user/cloudera/practice1/problem8/product/output")
+
+PREP QUESTION 9
+sqoop import \
+--connect "jdbc:mysql://localhost/retail_db" \
+--password cloudera --username root \
+--table customers \
+--fields-terminated-by '\t' \
+--columns "customer_id,customer_fname,customer_city"  \
+--target-dir /user/cloudera/problem9/customer_text
+
+QUESTION 9
+Create a metastore table named customer_parquet_compressed from tab delimited files provided 
+at below location.
+Input folder is  /user/cloudera/problem9/customer-text
+Schema for input  file
+
+customer_id   customer_fname   customer_city
+
+Use this location to store data for hive table: /user/cloudera/problem9/customer-hive
+Output file should be saved in parquet format using Snappy compression.
+For compression, below Hive property should be set to true
+SET hive.exec.compress.output=true;
+
+CREATE TABLE customer_parquet_compressed
+STORE AS parquet
+LOCATION '/user/cloudera/problem9/customer-text'
+TBLPROPERTIES("parquet.compression"="SNAPPY")
+AS SELECT * FROM customer_temp
+
+################################
+
+setConf between compressed and uncompressed
